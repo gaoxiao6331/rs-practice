@@ -6,3 +6,5 @@ pub mod markdown_wasm;
 
 #[path = "../todo-api/lib.rs"]
 pub mod todo_api;
+
+pub use markdown_wasm::parse_markdown;
