@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rust Markdown WASM Demo</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 24px;
+        background: #111827;
+        color: #e5e7eb;
+      }
+      .layout {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        min-height: 70vh;
+      }
+      textarea,
+      .preview {
+        width: 100%;
+        min-height: 100%;
+        box-sizing: border-box;
+        border: 1px solid #374151;
+        border-radius: 8px;
+        padding: 16px;
+        background: #1f2937;
+        color: #f9fafb;
+      }
+      textarea {
+        resize: vertical;
+      }
+      .preview {
+        overflow: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Rust Markdown WASM Demo</h1>
+    <p>Type markdown on the left, and the preview will update via WebAssembly on the right.</p>
+    <div class="layout">
+      <textarea id="source"># Hello Rust
+
+- **safe**
+- fast
+- productive</textarea>
+      <div id="preview" class="preview"></div>
+    </div>
+
+    <script type="module">
+      import init, { parse_markdown } from "./pkg/markdown_wasm.js";
+
+      async function boot() {
+        await init();
+        const source = document.getElementById("source");
+        const preview = document.getElementById("preview");
+
+        function render() {
+          preview.innerHTML = parse_markdown(source.value);
+        }
+
+        source.addEventListener("input", render);
+        render();
+      }
+
+      boot().catch((error) => {
+        console.error(error);
+        document.getElementById("preview").textContent =
+          "Failed to load wasm module. Run wasm-pack build first.";
+      });
+    </script>
+  </body>
+</html>

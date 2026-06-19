@@ -1,0 +1,16 @@
+[package]
+name = "kv-store"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+
+[[bin]]
+name = "kv_server"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -1,0 +1,21 @@
+# Rust build output
+/target/
+
+# wasm-pack generated artifacts
+/markdown-wasm/pkg/
+
+# Local runtime data
+/todo.db
+/todo.db-shm
+/todo.db-wal
+
+# Environment and local overrides
+.env
+.env.*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
