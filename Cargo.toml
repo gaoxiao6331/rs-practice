@@ -13,16 +13,32 @@ name = "my_hey"
 path = "load-tester/main.rs"
 
 [[bin]]
+name = "my_hey_reference"
+path = "load-tester/reference.rs"
+
+[[bin]]
 name = "kv_server"
 path = "kv-store/main.rs"
+
+[[bin]]
+name = "kv_server_reference"
+path = "kv-store/reference_main.rs"
 
 [[bin]]
 name = "markdown_preview"
 path = "markdown-wasm/main.rs"
 
 [[bin]]
+name = "markdown_reference"
+path = "markdown-wasm/reference_main.rs"
+
+[[bin]]
 name = "todo_api"
 path = "todo-api/main.rs"
+
+[[bin]]
+name = "todo_api_reference"
+path = "todo-api/reference_main.rs"
 
 [dependencies]
 anyhow = "1"
