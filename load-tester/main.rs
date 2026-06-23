@@ -1,9 +1,11 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use clap::Parser;
+use axum::http::method;
+use clap::{Parser, builder::Str};
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::Client;
+use reqwest::{Client, Method, Error};
+use tower::builder;
 
 #[derive(Debug, Clone, Parser)]
 #[command(name = "my_hey", about = "A minimal load-tester skeleton")]
@@ -15,6 +17,10 @@ struct Args {
     requests: usize,
     #[arg(long, default_value_t = 5_000)]
     timeout_ms: u64,
+    #[arg(short = 'm', long, default_value_t = Method::GET)]
+    http_method: Method,
+    #[arg(short = 'p', long, default_value_t = String::new())]
+    param: String,
 }
 
 #[tokio::main]
@@ -45,6 +51,32 @@ async fn main() -> Result<()> {
 //
 // TODO: 如需分层，再继续在下面新增一个“单次请求”函数，例如 send_one_request(...)。
 // TODO: 真正调用 client.get(...).send().await 的位置应该在那个函数里。
+
+async fn send_one_request(url: &str, client: &Client, method: Method, param: &str) -> Result<u128, Error> {
+    // 开始计时
+    let start= Instant::now();
+    // 使用http client 发送请求
+    let res = client
+        .request(method, url)
+         .header("Content-Type", "application/json")
+        .body(param.to_owned())
+        .send()
+        .await;
+    // 计算请求事件
+    let elapsed = start.elapsed();
+
+    match res {
+        Ok(_resp) => {
+            // 结果写日志 TODO
+            return Result::Ok(elapsed.as_millis())
+        },
+        Err(e) => {
+            return Result::Err(e)
+        }
+    }
+}
+
+async fn execute_load_test(args: Args, client: &Client) {}
 
 fn create_progress_bar(total: u64) -> ProgressBar {
     let progress = ProgressBar::new(total);
