@@ -18,7 +18,10 @@ use tokio::sync::{mpsc, Semaphore};
 /// 4. 真正最值得你自己重新敲一遍的是并发调度、结果聚合和错误处理这几块。
 
 #[derive(Debug, Clone, Parser)]
-#[command(name = "my_hey_reference", about = "Reference solution for the CLI load tester")]
+#[command(
+    name = "my_hey_reference",
+    about = "Reference solution for the CLI load tester"
+)]
 struct Args {
     /// 目标地址，例如 http://127.0.0.1:3000/health
     url: String,
@@ -177,7 +180,10 @@ async fn perform_request(client: Client, url: String, timeout: Duration) -> Requ
             success: false,
             latency_ms,
             status_code: None,
-            error: Some(format!("request timed out after {} ms", timeout.as_millis())),
+            error: Some(format!(
+                "request timed out after {} ms",
+                timeout.as_millis()
+            )),
         },
     }
 }
@@ -263,9 +269,7 @@ mod tests {
     #[tokio::test]
     async fn load_test_hits_local_server() {
         let app = Router::new().route("/", get(|| async { "ok" }));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-            .await
-            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
 
         let server = tokio::spawn(async move {

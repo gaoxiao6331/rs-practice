@@ -172,7 +172,9 @@ pub async fn handle_connection(socket: TcpStream, store: SharedStore) -> std::io
                 if let Some(peer) = peer {
                     warn!(%peer, ?error, "invalid command");
                 }
-                writer.write_all(format!("-ERR {:?}\n", error).as_bytes()).await?;
+                writer
+                    .write_all(format!("-ERR {:?}\n", error).as_bytes())
+                    .await?;
             }
         }
     }
@@ -223,7 +225,11 @@ mod tests {
 
         let writer = TcpStream::connect(address).await.unwrap();
         let mut reader = BufReader::new(writer);
-        reader.get_mut().write_all(b"SET lang Rust\n").await.unwrap();
+        reader
+            .get_mut()
+            .write_all(b"SET lang Rust\n")
+            .await
+            .unwrap();
 
         let mut response = String::new();
         reader.read_line(&mut response).await.unwrap();

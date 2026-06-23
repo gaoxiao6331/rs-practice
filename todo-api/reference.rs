@@ -142,10 +142,9 @@ async fn create_todo(
 }
 
 async fn list_todos(State(state): State<AppState>) -> Result<Json<Vec<Todo>>, AppError> {
-    let todos =
-        sqlx::query_as::<_, Todo>("SELECT id, title, completed FROM todos ORDER BY id ASC")
-            .fetch_all(state.pool.as_ref())
-            .await?;
+    let todos = sqlx::query_as::<_, Todo>("SELECT id, title, completed FROM todos ORDER BY id ASC")
+        .fetch_all(state.pool.as_ref())
+        .await?;
 
     Ok(Json(todos))
 }
@@ -201,7 +200,12 @@ mod tests {
         assert_eq!(response.status(), StatusCode::CREATED);
 
         let response = app
-            .oneshot(Request::builder().uri("/todos").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/todos")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 
