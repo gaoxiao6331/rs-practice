@@ -1,0 +1,1 @@
+cargo run --bin my_hey --  -c 10 -n 100 https://douyin.com
