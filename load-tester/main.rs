@@ -14,7 +14,7 @@ struct Args {
     concurrency: usize,
     #[arg(short = 'n', long, default_value_t = 100)]
     requests: usize,
-    #[arg(long, default_value_t = 5_000)]
+    #[arg(short = 't', long, default_value_t = 5_000)]
     timeout_ms: u64,
     #[arg(short = 'm', long, default_value_t = Method::GET)]
     http_method: Method,
@@ -103,8 +103,7 @@ async fn execute_load_test(
     client: &Client,
     process: &mut ProgressBar,
 ) -> Vec<RequestResult> {
-
-    let execute_by_group =async |cnt: u64| -> Vec<RequestResult> {
+    let execute_by_group = async |cnt: u64| -> Vec<RequestResult> {
         let mut que = vec![];
 
         for _ in 0..args.concurrency {
