@@ -1,11 +1,10 @@
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
-use axum::http::method;
-use clap::{Parser, builder::Str};
+use clap::Parser;
+use futures::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::{Client, Method, Error};
-use tower::builder;
+use reqwest::{Client, Error, Method};
 
 #[derive(Debug, Clone, Parser)]
 #[command(name = "my_hey", about = "A minimal load-tester skeleton")]
@@ -26,7 +25,15 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let progress = create_progress_bar(args.requests as u64);
+
+    assert!(
+        args.concurrency <= args.requests,
+        "concurrency > requests -> {} > {}",
+        args.concurrency,
+        args.requests
+    );
+
+    let mut progress = create_progress_bar(args.requests as u64);
     let _client = Client::builder()
         .timeout(Duration::from_millis(args.timeout_ms))
         .build()?;
@@ -38,7 +45,17 @@ async fn main() -> Result<()> {
     // TODO: 在这里调用“执行压测”的异步函数。
     // TODO: 这个函数内部应负责并发调度，并在过程中推进 progress。
     // TODO: 真正的 reqwest 请求不要直接写在 print_placeholder_report() 里。
-    progress.finish_with_message("TODO: hand-write async request scheduling");
+
+    let total_res = execute_load_test(&args, &_client, &mut progress).await;
+
+    // 统计结果
+    let success_count = total_res.iter().filter(|r| r.is_ok()).count();
+    let fail_count = total_res.len() - success_count;
+
+    progress.finish_with_message(format!(
+        "done success: {}, fail: {}",
+        success_count, fail_count
+    ));
     print_placeholder_report(args.requests);
     Ok(())
 }
@@ -52,13 +69,20 @@ async fn main() -> Result<()> {
 // TODO: 如需分层，再继续在下面新增一个“单次请求”函数，例如 send_one_request(...)。
 // TODO: 真正调用 client.get(...).send().await 的位置应该在那个函数里。
 
-async fn send_one_request(url: &str, client: &Client, method: Method, param: &str) -> Result<u128, Error> {
+type RequestResult = Result<u128, Error>;
+
+async fn send_one_request(
+    url: &str,
+    client: &Client,
+    method: &Method,
+    param: &str,
+) -> RequestResult {
     // 开始计时
-    let start= Instant::now();
+    let start = Instant::now();
     // 使用http client 发送请求
     let res = client
-        .request(method, url)
-         .header("Content-Type", "application/json")
+        .request(method.to_owned(), url)
+        .header("Content-Type", "application/json")
         .body(param.to_owned())
         .send()
         .await;
@@ -68,15 +92,58 @@ async fn send_one_request(url: &str, client: &Client, method: Method, param: &st
     match res {
         Ok(_resp) => {
             // 结果写日志 TODO
-            return Result::Ok(elapsed.as_millis())
-        },
-        Err(e) => {
-            return Result::Err(e)
+            return Result::Ok(elapsed.as_millis());
         }
+        Err(e) => return Result::Err(e),
     }
 }
 
-async fn execute_load_test(args: Args, client: &Client) {}
+async fn execute_load_test(
+    args: &Args,
+    client: &Client,
+    process: &mut ProgressBar,
+) -> Vec<RequestResult> {
+
+    let execute_by_group =async |cnt: u64| -> Vec<RequestResult> {
+        let mut que = vec![];
+
+        for _ in 0..args.concurrency {
+            let res = send_one_request(&args.url, client, &args.http_method, &args.param);
+            que.push(res);
+        }
+
+        let res = join_all(que).await;
+
+        return res;
+    };
+
+    let mut total_res = vec![];
+
+    let groups = (args.requests / args.concurrency) as u64;
+    let left = (args.requests % args.concurrency) as u64;
+
+    for _ in 0..groups {
+        let res = execute_by_group(args.concurrency as u64).await;
+        // 更新进度
+        process.inc(args.concurrency as u64);
+
+        // 把结果合并到总结果中
+        for ele in res {
+            total_res.push(ele);
+        }
+    }
+
+    let res = execute_by_group(left).await;
+    // 更新进度
+    process.inc(args.concurrency as u64);
+
+    // 把结果合并到总结果中
+    for ele in res {
+        total_res.push(ele);
+    }
+
+    total_res
+}
 
 fn create_progress_bar(total: u64) -> ProgressBar {
     let progress = ProgressBar::new(total);
