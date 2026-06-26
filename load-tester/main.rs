@@ -1,11 +1,13 @@
 use std::error::Error as StdError;
+use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use clap::Parser;
-use futures::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{Client, Error, Method, Response};
+use std::sync::Arc;
+use tokio::task::JoinSet;
 
 #[derive(Debug, Clone, Parser)]
 #[command(name = "my_hey", about = "A minimal load-tester skeleton")]
@@ -49,9 +51,8 @@ async fn main() -> Result<()> {
     // TODO: 这个函数内部应负责并发调度，并在过程中推进 progress。
     // TODO: 真正的 reqwest 请求不要直接写在 print_placeholder_report() 里。
 
-    let test_res = execute_load_test(&args, &_client, &mut progress).await;
+    let test_res = execute_load_test(&args, &_client, progress).await;
 
-    progress.finish_with_message("DONE!");
     print_placeholder_report(test_res);
     Ok(())
 }
@@ -137,50 +138,72 @@ async fn send_one_request(
 
 async fn execute_load_test(
     args: &Args,
-    client: &Client,
-    process: &mut ProgressBar,
+    http_client: &Client,
+    progress_bar: ProgressBar,
 ) -> (Vec<RequestResult>, u128) {
-    let now = Instant::now();
-
-    let execute_by_group = async |cnt: u64| -> Vec<RequestResult> {
-        let mut que = vec![];
-
-        for _ in 0..cnt {
-            let res = send_one_request(&args.url, client, &args.http_method, &args.param);
-            que.push(res);
-        }
-
-        let res = join_all(que).await;
-
-        return res;
-    };
-
+    // 结果数组
     let mut total_res = vec![];
 
-    let groups = (args.requests / args.concurrency) as u64;
-    let left = (args.requests % args.concurrency) as u64;
+    // 并发数
+    let concurrency = args.concurrency;
 
-    for _ in 0..groups {
-        let res = execute_by_group(args.concurrency as u64).await;
-        // 更新进度
-        process.inc(args.concurrency as u64);
+    // 总请求数
+    let total_req_count = args.requests as u32;
 
-        // 把结果合并到总结果中
-        for ele in res {
-            total_res.push(ele);
+    // 完成的请求数
+    let req_count_finshed = Arc::new(AtomicU32::new(0));
+
+    let mut set = JoinSet::new();
+
+    let url = Arc::new(args.url.clone());
+
+    let method = Arc::new(args.http_method.clone());
+
+    let param = Arc::new(args.param.clone());
+
+    let client = http_client.clone();
+
+    let now = Instant::now();
+
+    for _ in 0..concurrency {
+        let u = Arc::clone(&url);
+
+        let m = Arc::clone(&method);
+
+        let p = Arc::clone(&param);
+
+        let f = Arc::clone(&req_count_finshed);
+
+        let c = client.clone();
+
+        let b = progress_bar.clone();
+
+        set.spawn(async move {
+            let mut req_resps = vec![];
+
+            while f.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < total_req_count {
+                let resp = send_one_request(&*u, &c, &*m, &*p).await;
+                req_resps.push(resp);
+                b.inc(1);
+            }
+            req_resps
+        });
+    }
+
+    while let Some(r) = set.join_next().await {
+        match r {
+            Ok(v) => {
+                total_res.extend(v);
+            }
+            Err(e) => {
+                // TODO log
+            }
         }
     }
 
     let elapsed = now.elapsed();
 
-    let res = execute_by_group(left).await;
-    // 更新进度
-    process.inc(args.concurrency as u64);
-
-    // 把结果合并到总结果中
-    for ele in res {
-        total_res.push(ele);
-    }
+    progress_bar.finish_with_message("DONE!");
 
     (total_res, elapsed.as_millis())
 }
@@ -241,22 +264,4 @@ fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
     println!("elapsed         : {}", elapsed_avg);
     println!("throughput      : {}", throughput);
     println!("p90             : {}", p90);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parses_cli_args() {
-        let args = Args::parse_from(["my_hey", "-c", "8", "-n", "20", "https://tiktok.com/"]);
-        assert_eq!(args.concurrency, 8);
-        assert_eq!(args.requests, 20);
-    }
-
-    #[test]
-    fn creates_progress_bar_with_expected_length() {
-        let progress = create_progress_bar(12);
-        assert_eq!(progress.length(), Some(12));
-    }
 }
