@@ -61,24 +61,11 @@ async fn main() -> Result<()> {
 
     let progress = create_progress_bar(args.requests as u64);
 
-    // TODO: 在这里调用“执行压测”的异步函数。
-    // TODO: 这个函数内部应负责并发调度，并在过程中推进 progress。
-    // TODO: 真正的 reqwest 请求不要直接写在 print_placeholder_report() 里。
-
     let test_res = execute_load_test(&args, &_client, progress).await;
 
     print_placeholder_report(test_res);
     Ok(())
 }
-
-// TODO: 在这里新增一个异步函数，例如 execute_load_test(...)。
-// TODO: 这里是整个压测的主流程入口，负责：
-// TODO: 1. 按 requests/concurrency 调度任务
-// TODO: 2. 收集每次请求的结果和耗时
-// TODO: 3. 汇总统计数据后返回给 main()
-//
-// TODO: 如需分层，再继续在下面新增一个“单次请求”函数，例如 send_one_request(...)。
-// TODO: 真正调用 client.get(...).send().await 的位置应该在那个函数里。
 
 type ElapsedTime = u128;
 
@@ -234,9 +221,6 @@ fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
 
     let throughput = success_count as f64 / elapsed as f64;
 
-    // TODO: 这里只负责展示最终统计结果。
-    // TODO: 不要在这里发送请求；请求应该在 execute_load_test/send_one_request 之类的函数里完成。
-    // TODO: 后续把入参改成“统计结果对象”，而不是只有 total_requests。
     println!("\n== Load Test Report ==");
     println!("target requests : {}", total_res.len());
     println!("successful      : {}", success_count);
