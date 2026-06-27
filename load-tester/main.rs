@@ -1,13 +1,16 @@
-use std::error::Error as StdError;
 use std::sync::atomic::AtomicU32;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::{Client, Error, Method, Response};
+use reqwest::{Client, Method};
 use std::sync::Arc;
 use tokio::task::JoinSet;
+
+use tracing::{error, info};
+use tracing_appender::{non_blocking, rolling};
+use tracing_subscriber::fmt;
 
 #[derive(Debug, Clone, Parser)]
 #[command(name = "my_hey", about = "A minimal load-tester skeleton")]
@@ -36,6 +39,17 @@ async fn main() -> Result<()> {
         args.requests
     );
 
+    let file_appender = rolling::never("logs", "load-test.log");
+
+    let (non_blocking_writer, _guard) = non_blocking(file_appender);
+
+    fmt()
+        .with_writer(non_blocking_writer)
+        .with_target(false)
+        .init();
+
+    info!("Starting the test application...");
+
     let _client = Client::builder()
         .timeout(Duration::from_millis(args.timeout_ms))
         .build()?;
@@ -45,7 +59,7 @@ async fn main() -> Result<()> {
     println!("requests: {}", args.requests);
     println!("timeout_ms: {}", args.timeout_ms);
 
-    let mut progress = create_progress_bar(args.requests as u64);
+    let progress = create_progress_bar(args.requests as u64);
 
     // TODO: 在这里调用“执行压测”的异步函数。
     // TODO: 这个函数内部应负责并发调度，并在过程中推进 progress。
@@ -70,41 +84,6 @@ type ElapsedTime = u128;
 
 type RequestResult = Result<ElapsedTime, ()>;
 
-async fn append_to_log(msg: String) {
-    if cfg!(debug_assertions) {
-        println!("{}", msg);
-    }
-    // release 异步写文件 TODO
-}
-
-async fn append_success_log(resp: Response) {
-    let res = resp.text().await;
-    let msg = match res {
-        Ok(text) => text,
-        Err(e) => e.to_string(),
-    };
-    append_to_log(format!("success: {}", msg)).await;
-}
-
-async fn append_error_log(e: Error) {
-    let mut msg = format!(
-        "request failed: display={}, debug={:?}, is_timeout={}, is_connect={}, url={:?}",
-        e,
-        e,
-        e.is_timeout(),
-        e.is_connect(),
-        e.url()
-    );
-
-    let mut source = e.source();
-    while let Some(err) = source {
-        msg.push_str(&format!("\ncaused by: {}", err));
-        source = err.source();
-    }
-
-    append_to_log(msg).await;
-}
-
 async fn send_one_request(
     url: &str,
     client: &Client,
@@ -125,12 +104,13 @@ async fn send_one_request(
 
     match res {
         Ok(resp) => {
-            // 结果写日志
-            append_success_log(resp).await;
+            if resp.status().is_success() {
+                info!("size: {}", resp.content_length().unwrap_or(0));
+            }
             Result::Ok(elapsed.as_millis())
         }
         Err(e) => {
-            append_error_log(e).await;
+            error!(%e);
             Result::Err(())
         }
     }
@@ -196,7 +176,7 @@ async fn execute_load_test(
                 total_res.extend(v);
             }
             Err(e) => {
-                // TODO log
+                error!(%e, "fail to join")
             }
         }
     }
