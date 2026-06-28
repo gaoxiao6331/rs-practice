@@ -1,13 +1,13 @@
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use bytes::Bytes;
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{Client, Method};
-use std::sync::Arc;
 use tokio::task::JoinSet;
-
 use tracing::{error, info};
 use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::fmt;
@@ -40,7 +40,6 @@ async fn main() -> Result<()> {
     );
 
     let file_appender = rolling::never("logs", "load-test.log");
-
     let (non_blocking_writer, _guard) = non_blocking(file_appender);
 
     fmt()
@@ -60,7 +59,6 @@ async fn main() -> Result<()> {
     println!("timeout_ms: {}", args.timeout_ms);
 
     let progress = create_progress_bar(args.requests as u64);
-
     let test_res = execute_load_test(&args, &_client, progress).await;
 
     print_placeholder_report(test_res);
@@ -68,25 +66,22 @@ async fn main() -> Result<()> {
 }
 
 type ElapsedTime = u128;
-
 type RequestResult = Result<ElapsedTime, ()>;
 
 async fn send_one_request(
     url: &str,
     client: &Client,
-    method: &Method,
-    param: &str,
+    method: Method,
+    param: Bytes, // Passed by value, cheap to clone
 ) -> RequestResult {
-    // 开始计时
     let start = Instant::now();
-    // 使用http client 发送请求
     let res = client
-        .request(method.to_owned(), url)
+        .request(method, url)
         .header("Content-Type", "application/json")
-        .body(param.to_owned())
+        .body(param) // reqwest consumes Bytes without allocation
         .send()
         .await;
-    // 计算请求事件
+    
     let elapsed = start.elapsed();
 
     match res {
@@ -108,48 +103,35 @@ async fn execute_load_test(
     http_client: &Client,
     progress_bar: ProgressBar,
 ) -> (Vec<RequestResult>, u128) {
-    // 结果数组
     let mut total_res = vec![];
-
-    // 并发数
     let concurrency = args.concurrency;
-
-    // 总请求数
     let total_req_count = args.requests as u32;
-
-    // 完成的请求数
+    
     let req_count_finshed = Arc::new(AtomicU32::new(0));
-
     let mut set = JoinSet::new();
 
     let url = Arc::new(args.url.clone());
-
-    let method = Arc::new(args.http_method.clone());
-
-    let param = Arc::new(args.param.clone());
-
+    let method = args.http_method.clone(); 
+    let param = Bytes::from(args.param.clone()); // Convert String to Bytes once
     let client = http_client.clone();
-
     let now = Instant::now();
 
     for _ in 0..concurrency {
         let u = Arc::clone(&url);
-
-        let m = Arc::clone(&method);
-
-        let p = Arc::clone(&param);
-
+        let m = method.clone(); 
+        let p = param.clone(); // Cloning Bytes is just a fast reference count increment
         let f = Arc::clone(&req_count_finshed);
-
         let c = client.clone();
-
         let b = progress_bar.clone();
 
         set.spawn(async move {
-            let mut req_resps = vec![];
+            // Pre-allocate the vector with expected capacity
+            let expected_capacity = (total_req_count as usize / concurrency) + 1;
+            let mut req_resps = Vec::with_capacity(expected_capacity);
 
-            while f.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < total_req_count {
-                let resp = send_one_request(&*u, &c, &*m, &*p).await;
+            // Use Ordering::Relaxed for better performance
+            while f.fetch_add(1, Ordering::Relaxed) < total_req_count {
+                let resp = send_one_request(&u, &c, m.clone(), p.clone()).await;
                 req_resps.push(resp);
                 b.inc(1);
             }
@@ -169,7 +151,6 @@ async fn execute_load_test(
     }
 
     let elapsed = now.elapsed();
-
     progress_bar.finish_with_message("DONE!");
 
     (total_res, elapsed.as_millis())
@@ -182,6 +163,7 @@ fn create_progress_bar(total: u64) -> ProgressBar {
     )
     .unwrap_or_else(|_| ProgressStyle::default_bar())
     .progress_chars("##-");
+    
     progress.set_style(style);
     progress.set_position(0);
     progress.tick();
@@ -191,7 +173,6 @@ fn create_progress_bar(total: u64) -> ProgressBar {
 fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
     let (total_res, elapsed) = test_res;
 
-    // 统计结果
     let mut success = total_res
         .iter()
         .filter_map(|r| match r {
@@ -202,7 +183,7 @@ fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
 
     success.sort();
 
-    let success_count = (&success).len();
+    let success_count = success.len();
 
     let elapsed_avg = if success_count > 0 {
         success.iter().sum::<ElapsedTime>() as f64 / success_count as f64
@@ -219,13 +200,19 @@ fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
         success[p90_idx]
     };
 
-    let throughput = success_count as f64 / elapsed as f64;
+    // Calculate throughput correctly as Requests Per Second (RPS)
+    let elapsed_sec = elapsed as f64 / 1000.0;
+    let throughput = if elapsed_sec > 0.0 {
+        success_count as f64 / elapsed_sec
+    } else {
+        0.0
+    };
 
     println!("\n== Load Test Report ==");
     println!("target requests : {}", total_res.len());
     println!("successful      : {}", success_count);
     println!("failed          : {}", fail_count);
-    println!("elapsed         : {}", elapsed_avg);
-    println!("throughput      : {}", throughput);
-    println!("p90             : {}", p90);
+    println!("elapsed avg (ms): {}", elapsed_avg);
+    println!("throughput (RPS): {:.2}", throughput);
+    println!("p90 (ms)        : {}", p90);
 }
