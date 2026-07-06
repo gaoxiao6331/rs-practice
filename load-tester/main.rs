@@ -118,7 +118,7 @@ async fn execute_load_test(
     let total_req_count = args.requests as u32;
 
     // 完成的请求数
-    let req_count_finshed = Arc::new(AtomicU32::new(0));
+    let req_count_finished = Arc::new(AtomicU32::new(0));
 
     let mut set = JoinSet::new();
 
@@ -139,7 +139,7 @@ async fn execute_load_test(
 
         let p = Arc::clone(&param);
 
-        let f = Arc::clone(&req_count_finshed);
+        let f = Arc::clone(&req_count_finished);
 
         let c = client.clone();
 
