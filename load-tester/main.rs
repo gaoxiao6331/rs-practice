@@ -81,15 +81,23 @@ async fn send_one_request(
         .body(param) // reqwest consumes Bytes without allocation
         .send()
         .await;
-    
+
     let elapsed = start.elapsed();
 
     match res {
         Ok(resp) => {
             if resp.status().is_success() {
-                info!("size: {}", resp.content_length().unwrap_or(0));
+                Result::Ok(elapsed.as_millis())
+            } else {
+                error!(
+                    "status code: {}, error: {}",
+                    resp.status(),
+                    resp.text()
+                        .await
+                        .unwrap_or("parse response text error".to_string())
+                );
+                Result::Err(())
             }
-            Result::Ok(elapsed.as_millis())
         }
         Err(e) => {
             error!(%e);
@@ -106,19 +114,19 @@ async fn execute_load_test(
     let mut total_res = vec![];
     let concurrency = args.concurrency;
     let total_req_count = args.requests as u32;
-    
+
     let req_count_finshed = Arc::new(AtomicU32::new(0));
     let mut set = JoinSet::new();
 
     let url = Arc::new(args.url.clone());
-    let method = args.http_method.clone(); 
+    let method = args.http_method.clone();
     let param = Bytes::from(args.param.clone()); // Convert String to Bytes once
     let client = http_client.clone();
     let now = Instant::now();
 
     for _ in 0..concurrency {
         let u = Arc::clone(&url);
-        let m = method.clone(); 
+        let m = method.clone();
         let p = param.clone(); // Cloning Bytes is just a fast reference count increment
         let f = Arc::clone(&req_count_finshed);
         let c = client.clone();
@@ -163,7 +171,7 @@ fn create_progress_bar(total: u64) -> ProgressBar {
     )
     .unwrap_or_else(|_| ProgressStyle::default_bar())
     .progress_chars("##-");
-    
+
     progress.set_style(style);
     progress.set_position(0);
     progress.tick();
