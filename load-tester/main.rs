@@ -8,7 +8,7 @@ use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::{Client, Method};
 use tokio::task::JoinSet;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use tracing_appender::{non_blocking, rolling};
 use tracing_subscriber::fmt;
 
@@ -74,6 +74,7 @@ async fn send_one_request(
     method: Method,
     param: Bytes, // Passed by value, cheap to clone
 ) -> RequestResult {
+    
     let start = Instant::now();
     let res = client
         .request(method, url)
@@ -111,6 +112,11 @@ async fn execute_load_test(
     http_client: &Client,
     progress_bar: ProgressBar,
 ) -> (Vec<RequestResult>, u128) {
+
+    if args.http_method == Method::GET && !args.param.is_empty() {
+        warn!("you are using GET method, param will be ignored");
+    }
+    
     let mut total_res = vec![];
     let concurrency = args.concurrency;
     let total_req_count = args.requests as u32;
