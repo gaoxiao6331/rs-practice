@@ -123,7 +123,7 @@ async fn execute_load_test(
     let concurrency = args.concurrency;
     let total_req_count = args.requests as u32;
 
-    let req_count_finshed = Arc::new(AtomicU32::new(0));
+    let req_count_finished = Arc::new(AtomicU32::new(0));
     let mut set = JoinSet::new();
 
     let url = Arc::new(args.url.clone());
@@ -136,7 +136,7 @@ async fn execute_load_test(
         let u = Arc::clone(&url);
         let m = method.clone();
         let p = param.clone(); // Cloning Bytes is just a fast reference count increment
-        let f = Arc::clone(&req_count_finshed);
+        let f = Arc::clone(&req_count_finished);
         let c = client.clone();
         let b = progress_bar.clone();
 
