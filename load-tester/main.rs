@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
 
     info!("Starting the test application...");
 
-    let _client = Client::builder()
+    let client = Client::builder()
         .timeout(Duration::from_millis(args.timeout_ms))
         .build()?;
 
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
     println!("timeout_ms: {}", args.timeout_ms);
 
     let progress = create_progress_bar(args.requests as u64);
-    let test_res = execute_load_test(&args, &_client, progress).await;
+    let test_res = execute_load_test(&args, &client, progress).await;
 
     print_placeholder_report(test_res);
     Ok(())
@@ -74,14 +74,17 @@ async fn send_one_request(
     method: Method,
     param: Bytes, // Passed by value, cheap to clone
 ) -> RequestResult {
-    
     let start = Instant::now();
-    let res = client
-        .request(method, url)
-        .header("Content-Type", "application/json")
-        .body(param) // reqwest consumes Bytes without allocation
-        .send()
-        .await;
+    let res = if method == Method::GET {
+        client.request(method, url).send().await
+    } else {
+        client
+            .request(method, url)
+            .header("Content-Type", "application/json")
+            .body(param) // reqwest consumes Bytes without allocation
+            .send()
+            .await
+    };
 
     let elapsed = start.elapsed();
 
@@ -112,11 +115,10 @@ async fn execute_load_test(
     http_client: &Client,
     progress_bar: ProgressBar,
 ) -> (Vec<RequestResult>, u128) {
-
     if args.http_method == Method::GET && !args.param.is_empty() {
         warn!("you are using GET method, param will be ignored");
     }
-    
+
     let mut total_res = vec![];
     let concurrency = args.concurrency;
     let total_req_count = args.requests as u32;
