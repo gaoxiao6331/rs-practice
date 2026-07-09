@@ -217,18 +217,20 @@ fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
     let fail_count = total_res.len() - success_count;
 
     let p90 = if success.is_empty() {
-        u128::MIN
+        "N/A"
     } else {
         let p90_idx = (success.len() * 9).div_ceil(10) - 1;
-        success[p90_idx]
+        let v = success[p90_idx];
+        &v.to_string()
     };
 
     // Calculate throughput correctly as Requests Per Second (RPS)
     let elapsed_sec = elapsed as f64 / 1000.0;
     let throughput = if elapsed_sec > 0.0 {
-        success_count as f64 / elapsed_sec
+        let v = success_count as f64 / elapsed_sec;
+        &v.to_string()
     } else {
-        0.0
+        "N/A"
     };
 
     println!("\n== Load Test Report ==");
