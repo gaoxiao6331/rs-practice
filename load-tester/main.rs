@@ -143,10 +143,17 @@ async fn execute_load_test(
         set.spawn(async move {
             // Pre-allocate the vector with expected capacity
             let expected_capacity = (total_req_count as usize / concurrency) + 1;
-            let mut req_resps = Vec::with_capacity(expected_capacity);
+            // add 50% buffer to prevent reallocation due to uneven load distribution
+            let actual_capacity = (expected_capacity as f64 * 1.5) as usize;
+            let mut req_resps = Vec::with_capacity(actual_capacity);
 
-            // Use Ordering::Relaxed for better performance
-            while f.fetch_add(1, Ordering::Relaxed) < total_req_count {
+            while let Ok(_) = f.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |cur| {
+                if cur < total_req_count {
+                    Some(cur + 1)
+                } else {
+                    None
+                }
+            }) {
                 let resp = send_one_request(&u, &c, m.clone(), p.clone()).await;
                 req_resps.push(resp);
                 b.inc(1);
