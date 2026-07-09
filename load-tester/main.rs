@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -217,20 +218,20 @@ fn print_placeholder_report(test_res: (Vec<RequestResult>, u128)) {
     let fail_count = total_res.len() - success_count;
 
     let p90 = if success.is_empty() {
-        "N/A"
+        "N/A".to_string()
     } else {
         let p90_idx = (success.len() * 9).div_ceil(10) - 1;
         let v = success[p90_idx];
-        &v.to_string()
+        v.to_string()
     };
 
     // Calculate throughput correctly as Requests Per Second (RPS)
     let elapsed_sec = elapsed as f64 / 1000.0;
     let throughput = if elapsed_sec > 0.0 {
         let v = success_count as f64 / elapsed_sec;
-        &v.to_string()
+        v.to_string()
     } else {
-        "N/A"
+        "N/A".to_string()
     };
 
     println!("\n== Load Test Report ==");
