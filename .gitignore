@@ -1,5 +1,5 @@
 # Rust build output
-/target/
+target
 
 # wasm-pack generated artifacts
 /markdown-wasm/pkg/

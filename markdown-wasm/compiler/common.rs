@@ -13,6 +13,11 @@
 // | 删除线 | `~~text~~` |
 // | 表格  | `\|`       |
 
+use auto_lifetime::auto_lifetime;
+
+/// 用 `#[auto_lifetime]` 自动给所有 `&str` 引用打上同一个生命周期 `'a`，
+/// 免去手动写 `LineType<'a>` / `&'a str` 的样板代码。
+#[auto_lifetime]
 pub enum LineType {
     Heading(&str),
     Text(&str),
