@@ -1,9 +1,11 @@
 use wasm_bindgen::prelude::*;
 
+mod compiler;
+use compiler::md2html::generate_html;
+
 #[wasm_bindgen]
-pub fn parse_markdown(_input: &str) -> String {
-    // TODO: 手工实现 Markdown AST、状态机解析和 HTML 渲染。
-    "<p>TODO: implement markdown parser by hand</p>".to_string()
+pub fn parse_markdown(input: &str) -> String {
+    generate_html(input)
 }
 
 #[cfg(test)]
