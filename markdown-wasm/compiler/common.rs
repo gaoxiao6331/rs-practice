@@ -20,20 +20,22 @@ use auto_lifetime::auto_lifetime;
 #[auto_lifetime]
 pub enum LineType {
     Heading(&str),
-    Text(&str),
-    Bold(&str),
-    InlineCode(&str),
+    Paragraph(&str),
     CodeBlockStart(&str),
-    CodeBlockEnd(&str),
+    CodeBlockEnd,
     UnorderedList(&str, u64),
     OrderedList(&str),
     Quote(&str),
-    Link(&str),
     HorizentalRule(&str),
-    Italic(&str),
     Image(&str),
     Strikethrouth(&str),
     Table(&str),
+    BlankLine,
+    // Text(&str),
+    // Link(&str),
+    // Italic(&str),
+    // Bold(&str),
+    // InlineCode(&str),
 }
 
 pub enum Node {}
