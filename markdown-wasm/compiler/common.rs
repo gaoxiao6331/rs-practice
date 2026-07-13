@@ -19,23 +19,17 @@ use auto_lifetime::auto_lifetime;
 /// 免去手动写 `LineType<'a>` / `&'a str` 的样板代码。
 #[auto_lifetime]
 pub enum LineType {
-    Heading(&str),
-    Paragraph(&str),
-    CodeBlockStart(&str),
+    Heading { level: u64, text: &str },
+    Paragraph { text: &str },
+    CodeBlockStart { language: &str },
     CodeBlockEnd,
-    UnorderedList(&str, u64),
-    OrderedList(&str),
-    Quote(&str),
-    HorizentalRule(&str),
-    Image(&str),
-    Strikethrouth(&str),
-    Table(&str),
+    UnorderedList { text: &str, indent: u64 },
+    OrderedList { text: &str },
+    Quote { text: &str },
+    HorizentalRule,
+    Image { alt: &str, url: &str },
+    TableRow { text: &str },
     BlankLine,
-    // Text(&str),
-    // Link(&str),
-    // Italic(&str),
-    // Bold(&str),
-    // InlineCode(&str),
 }
 
 pub enum Node {}
