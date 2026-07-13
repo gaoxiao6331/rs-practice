@@ -36,6 +36,8 @@ pub enum LineType {
     Table(&str),
 }
 
-pub enum Token {}
+pub enum Node {}
 
-pub struct Ast {}
+pub struct Ast {
+    children: Vec<Node>,
+}
