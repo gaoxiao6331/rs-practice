@@ -1,213 +1,525 @@
-//! # auto-lifetime
-//!
-//! A small procedural macro that solves the classic *"missing lifetime specifier"*
-//! error (`E0106`) for data types that hold references but were written without an
-//! explicit lifetime.
-//!
-//! Apply `#[auto_lifetime]` to a `struct` or `enum`. The macro:
-//!
-//! 1. adds **one** lifetime parameter (named `'a` by default) to the type, and
-//! 2. rewrites every bare reference (`&T`, `&mut T`, `&str`, and references hidden
-//!    inside `Vec<&str>`, `Option<&str>`, tuples, etc.) so that it is tagged with
-//!    that shared lifetime.
-//!
-//! ```ignore
-//! use auto_lifetime::auto_lifetime;
-//!
-//! #[auto_lifetime]
-//! pub enum LineType {
-//!     Heading(&str),
-//!     Text(&str),
-//! }
-//! // expands to:
-//! // pub enum LineType<'a> {
-//! //     Heading(&'a str),
-//! //     Text(&'a str),
-//! // }
-//! ```
-//!
-//! ## Behaviour notes
-//!
-//! * If the type already declares a lifetime parameter, the macro **reuses the first
-//!   one** instead of adding a new `'a` (so `struct Foo<'b> { s: &str }` becomes
-//!   `struct Foo<'b> { s: &'b str }` rather than gaining a second lifetime).
-//! * References that already carry an explicit lifetime are left untouched — the
-//!   macro only fills in the *missing* ones. This keeps intentionally multi-lifetime
-//!   types correct.
-//! * If the type contains no bare references at all, it is emitted unchanged.
-
 use proc_macro::TokenStream;
-use proc_macro2::{Ident, Span};
+
 use quote::quote;
+
+use proc_macro2::Span;
+
+use std::collections::{HashMap, HashSet};
+
+
 use syn::{
-    parse_macro_input, Data, DeriveInput, GenericParam, Generics, Lifetime, LifetimeParam,
+    parse_macro_input,
+
+    ItemMod,
+    Item,
+
+    GenericParam,
+    Lifetime,
+    LifetimeParam,
+
+    Type,
+    TypePath,
     TypeReference,
-    visit::{self, Visit},
-    visit_mut::{self, VisitMut},
+
+    PathArguments,
+    GenericArgument,
+
+    visit::Visit,
+    visit_mut::VisitMut,
 };
 
-/// Attribute macro: automatically annotate all reference types with a shared lifetime.
-///
-/// Works on `struct`, `enum`, and `union`.
+
+
 #[proc_macro_attribute]
-pub fn auto_lifetime(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as DeriveInput);
-    let expanded = expand_auto_lifetime(input);
-    TokenStream::from(quote!(#expanded))
+pub fn auto_lifetime(
+    _attr: TokenStream,
+    item: TokenStream,
+) -> TokenStream {
+
+
+    let mut module =
+        parse_macro_input!(
+            item as ItemMod
+        );
+
+
+    expand(
+        &mut module
+    );
+
+
+    TokenStream::from(
+        quote!(#module)
+    )
 }
 
-/// Core transformation. Adds a shared lifetime and tags every bare reference with it.
-fn expand_auto_lifetime(mut input: DeriveInput) -> DeriveInput {
-    // 1. Nothing to do if there is no bare reference anywhere.
-    if !contains_bare_reference(&input.data) {
-        return input;
-    }
 
-    // 2. Resolve (or create) the lifetime we will use for every bare reference.
-    let lifetime = if let Some(existing) = input.generics.lifetimes().next() {
-        // Reuse the first declared lifetime rather than introducing a new one.
-        existing.lifetime.clone()
-    } else {
-        let name = choose_lifetime_name(&input.generics);
-        let lt = Lifetime {
-            apostrophe: Span::call_site(),
-            ident: Ident::new(&name, Span::call_site()),
+
+fn expand(
+    module:&mut ItemMod
+){
+
+    let items =
+        match &mut module.content {
+
+            Some((_,items)) => items,
+
+            None => return,
         };
-        input
-            .generics
-            .params
-            .push(GenericParam::Lifetime(LifetimeParam::new(lt.clone())));
-        lt
-    };
 
-    // 3. Tag every bare reference with that lifetime.
-    let mut adder = LifetimeAdder {
-        lifetime: &lifetime,
-    };
-    match &mut input.data {
-        Data::Struct(s) => adder.visit_fields_mut(&mut s.fields),
-        Data::Enum(e) => {
-            for variant in &mut e.variants {
-                adder.visit_fields_mut(&mut variant.fields);
+
+
+    //
+    // 收集类型
+    //
+    let mut names =
+        HashSet::new();
+
+
+
+    for item in items.iter(){
+
+        match item {
+
+            Item::Struct(s)=>{
+                names.insert(
+                    s.ident.to_string()
+                );
+            }
+
+            Item::Enum(e)=>{
+                names.insert(
+                    e.ident.to_string()
+                );
+            }
+
+            _=>{}
+        }
+    }
+
+
+
+
+
+    //
+    // 类型依赖图
+    //
+    let mut deps:
+        HashMap<String,HashSet<String>>
+        = HashMap::new();
+
+
+
+    for item in items.iter(){
+
+
+        if let Some(name)=item_name(item){
+
+
+            let mut finder =
+                DependencyFinder{
+                    result:HashSet::new()
+                };
+
+
+            finder.visit_item(item);
+
+
+            deps.insert(
+                name,
+                finder.result
+            );
+        }
+
+    }
+
+
+
+
+
+    //
+    // 找出直接有引用的类型
+    //
+    let mut need =
+        HashSet::new();
+
+
+
+    for item in items.iter(){
+
+        if has_reference(item){
+
+            if let Some(name)=item_name(item){
+
+                need.insert(name);
+
             }
         }
-        Data::Union(u) => adder.visit_fields_named_mut(&mut u.fields),
     }
 
-    input
-}
 
-/// Pick a lifetime name that does not collide with names already in `generics`.
-fn choose_lifetime_name(generics: &Generics) -> String {
-    let taken: std::collections::HashSet<String> = generics
-        .lifetimes()
-        .map(|lt| lt.lifetime.ident.to_string())
-        .collect();
 
-    for candidate in ["a", "auto", "__auto", "item"] {
-        if !taken.contains(candidate) {
-            return candidate.to_string();
-        }
-    }
 
-    let mut i = 0;
+
+    //
+    // DFS传播
+    //
     loop {
-        let candidate = format!("auto{i}");
-        if !taken.contains(&candidate) {
-            return candidate;
-        }
-        i += 1;
-    }
-}
 
-/// Immutable pass: report whether any reference is missing a lifetime.
-struct RefFinder {
-    found: bool,
-}
+        let mut changed=false;
 
-impl<'ast> Visit<'ast> for RefFinder {
-    fn visit_type_reference(&mut self, node: &'ast TypeReference) {
-        if node.lifetime.is_none() {
-            self.found = true;
-        }
-        visit::visit_type_reference(self, node);
-    }
-}
 
-/// Mutable pass: attach the shared lifetime to every bare reference.
-struct LifetimeAdder<'b> {
-    lifetime: &'b Lifetime,
-}
+        for (name,children)
+        in deps.iter()
+        {
 
-impl<'ast, 'b> VisitMut for LifetimeAdder<'b> {
-    fn visit_type_reference_mut(&mut self, node: &mut TypeReference) {
-        if node.lifetime.is_none() {
-            node.lifetime = Some(self.lifetime.clone());
-        }
-        visit_mut::visit_type_reference_mut(self, node);
-    }
-}
+            if need.contains(name){
+                continue;
+            }
 
-/// Does the type contain any reference without an explicit lifetime?
-fn contains_bare_reference(data: &Data) -> bool {
-    let mut finder = RefFinder { found: false };
-    match data {
-        Data::Struct(s) => finder.visit_fields(&s.fields),
-        Data::Enum(e) => {
-            for variant in &e.variants {
-                finder.visit_fields(&variant.fields);
+
+            if children.iter()
+                .any(|x|need.contains(x))
+            {
+
+                need.insert(
+                    name.clone()
+                );
+
+                changed=true;
             }
         }
-        Data::Union(u) => finder.visit_fields_named(&u.fields),
+
+
+        if !changed{
+            break;
+        }
     }
-    finder.found
+
+
+
+
+
+    //
+    // 修改
+    //
+    for item in items.iter_mut(){
+
+
+        let name =
+            match item_name(item){
+
+                Some(x)=>x,
+
+                None=>continue,
+            };
+
+
+
+        if !need.contains(&name){
+            continue;
+        }
+
+
+
+        add_lifetime(item);
+
+
+        let mut rw =
+            LifetimeRewriter{
+                targets:&need,
+                lifetime:
+                Lifetime::new(
+                    "'a",
+                    Span::call_site()
+                )
+            };
+
+
+        rw.visit_item_mut(item);
+
+    }
+
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use quote::quote;
 
-    fn expand(src: &str) -> String {
-        let input: DeriveInput = syn::parse_str(src).expect("valid item");
-        let out = expand_auto_lifetime(input);
-        quote!(#out).to_string()
+
+
+
+fn item_name(
+    item:&Item
+)->Option<String>{
+
+    match item {
+
+        Item::Struct(s)=>
+            Some(
+                s.ident.to_string()
+            ),
+
+
+        Item::Enum(e)=>
+            Some(
+                e.ident.to_string()
+            ),
+
+
+        _=>None
+    }
+}
+
+
+
+
+
+fn add_lifetime(
+    item:&mut Item
+){
+
+    let generics =
+        match item {
+
+            Item::Struct(s)=>
+                &mut s.generics,
+
+
+            Item::Enum(e)=>
+                &mut e.generics,
+
+
+            _=>return,
+        };
+
+
+
+    if generics.lifetimes()
+        .next()
+        .is_some()
+    {
+        return;
     }
 
-    #[test]
-    fn adds_lifetime_to_enum_with_str_refs() {
-        let out = expand("pub enum LineType { Heading(&str), Text(&str) }");
-        assert!(out.contains("LineType < 'a >"), "got: {out}");
-        assert!(out.contains("& 'a str"), "got: {out}");
+
+
+    generics.params.push(
+        GenericParam::Lifetime(
+            LifetimeParam::new(
+                Lifetime::new(
+                    "'a",
+                    Span::call_site()
+                )
+            )
+        )
+    );
+}
+
+
+
+
+
+
+
+fn has_reference(
+    item:&Item
+)->bool{
+
+
+    struct Finder{
+        found:bool
     }
 
-    #[test]
-    fn tags_references_inside_generics() {
-        let out = expand("struct Foo { items: Vec<&str>, opt: Option<&str> }");
-        assert!(out.contains("Foo < 'a >"), "got: {out}");
-        assert!(out.contains("Vec < & 'a str >"), "got: {out}");
-        assert!(out.contains("Option < & 'a str >"), "got: {out}");
+
+
+    impl<'ast> Visit<'ast>
+    for Finder{
+
+
+        fn visit_type_reference(
+            &mut self,
+            node:&'ast TypeReference
+        ){
+
+            self.found=true;
+
+
+            syn::visit::visit_type_reference(
+                self,
+                node
+            );
+        }
+
     }
 
-    #[test]
-    fn leaves_non_reference_fields_untouched() {
-        let out = expand("struct Foo { n: u64, s: String }");
-        // No bare references -> no lifetime parameter added.
-        assert!(!out.contains("< 'a >"), "got: {out}");
+
+
+    let mut f =
+        Finder{
+            found:false
+        };
+
+
+    f.visit_item(item);
+
+
+    f.found
+}
+
+
+
+
+
+
+
+struct DependencyFinder {
+
+    result:HashSet<String>,
+}
+
+
+
+impl<'ast> Visit<'ast>
+for DependencyFinder{
+
+
+    fn visit_type_path(
+        &mut self,
+        node:&'ast TypePath
+    ){
+
+
+        if let Some(seg)=
+            node.path.segments.last()
+        {
+
+            let name =
+                seg.ident.to_string();
+
+
+            self.result.insert(name);
+
+        }
+
+
+        syn::visit::visit_type_path(
+            self,
+            node
+        );
+    }
+}
+
+
+
+
+
+
+
+struct LifetimeRewriter<'a>{
+
+    targets:&'a HashSet<String>,
+
+    lifetime:Lifetime,
+}
+
+
+
+impl VisitMut
+for LifetimeRewriter<'_>{
+
+
+
+    fn visit_type_reference_mut(
+        &mut self,
+        node:&mut TypeReference
+    ){
+
+        if node.lifetime.is_none(){
+
+            node.lifetime =
+                Some(
+                    self.lifetime.clone()
+                );
+        }
+
+
+        syn::visit_mut::
+        visit_type_reference_mut(
+            self,
+            node
+        );
     }
 
-    #[test]
-    fn reuses_existing_lifetime() {
-        let out = expand("struct Foo<'b> { s: &str }");
-        assert!(out.contains("Foo < 'b >"), "got: {out}");
-        assert!(out.contains("& 'b str"), "got: {out}");
-        // Should NOT introduce a second lifetime named 'a.
-        assert!(!out.contains("< 'a "), "got: {out}");
+
+
+
+
+
+    fn visit_type_path_mut(
+        &mut self,
+        node:&mut TypePath
+    ){
+
+
+        if let Some(seg)=
+            node.path.segments.last_mut()
+        {
+
+
+            let name =
+                seg.ident.to_string();
+
+
+
+            if self.targets.contains(&name)
+                &&
+                matches!(
+                    seg.arguments,
+                    PathArguments::None
+                )
+            {
+
+
+                let mut args =
+                    syn::punctuated::Punctuated::new();
+
+
+                args.push(
+                    GenericArgument::Lifetime(
+                        self.lifetime.clone()
+                    )
+                );
+
+
+                seg.arguments =
+                    PathArguments::AngleBracketed(
+                        syn::AngleBracketedGenericArguments{
+
+                            colon2_token:None,
+
+                            lt_token:
+                            syn::token::Lt(
+                                Span::call_site()
+                            ),
+
+                            args,
+
+                            gt_token:
+                            syn::token::Gt(
+                                Span::call_site()
+                            ),
+                        }
+                    );
+
+            }
+
+        }
+
+
+
+        syn::visit_mut::
+        visit_type_path_mut(
+            self,
+            node
+        );
     }
 
-    #[test]
-    fn keeps_explicit_lifetimes() {
-        let out = expand("struct Foo<'a> { own: &'a str, borrowed: &str }");
-        assert!(out.contains("& 'a str"), "got: {out}");
-    }
 }

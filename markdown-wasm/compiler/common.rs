@@ -16,101 +16,81 @@
 use auto_lifetime::auto_lifetime;
 
 #[auto_lifetime]
-pub enum LineType {
-    Heading { level: u64, text: &str },
-    Paragraph { text: &str },
-    CodeBlockStart { language: &str },
-    CodeBlockEnd,
-    UnorderedList { text: &str, indent: u64 },
-    OrderedList { text: &str },
-    Quote { text: &str },
-    HorizontalRule,
-    Image { alt: &str, url: &str },
-    TableRow { text: &str },
-    BlankLine,
-}
+pub mod ast {
+    pub enum LineType {
+        Heading { level: u64, text: &str },
+        Paragraph { text: &str },
+        CodeBlockStart { language: &str },
+        CodeBlockEnd,
+        UnorderedList { text: &str, indent: u64 },
+        OrderedList { text: &str },
+        Quote { text: &str },
+        HorizontalRule,
+        Image { alt: &str, url: &str },
+        TableRow { text: &str },
+        BlankLine,
+    }
 
-#[auto_lifetime]
-pub enum TextNode {
-    BoldText { text: &str },
-    ItalicText { text: &str },
-    PlainText { text: &str },
-    StrikethroughText { text: &str },
-    InlineCode { text: &str },
-}
+    pub struct ListItem {
+        children: Vec<Inline>,
+        nested: Vec<ListItem>,
+    }
 
-pub struct ListItem {
-    text: TextNode,
-    children: Vec<ListItem>,
-}
+    pub struct TableCell {
+        children: Vec<Inline>,
+    }
 
-pub struct TableCell {
-    text: TextNode,
-}
+    pub struct TableRow {
+        cells: Vec<TableCell>,
+    }
 
-pub struct TableRow {
-    cols: Vec<TableCell>,
-}
+    pub enum Inline {
+        Bold { children: Vec<Inline> },
+        Italic { children: Vec<Inline> },
+        Text { text: &str },
+        Strikethrough { children: Vec<Inline> },
+        InlineCode { text: &str },
+        Image { alt: &str, url: &str },
+        Link { children: Vec<Inline>, url: &str },
+    }
 
-#[auto_lifetime]
-pub enum Node {
-    // heading
-    Heading {
-        level: u64,
-        text: &str,
-    },
-    // paragraph
-    Paragraph {
-        children: Node,
-    },
-    // text
-    Text {
-        children: Vec<Node>,
-    },
+    pub enum Block {
+        // heading
+        Heading {
+            level: u64,
+            text: &str,
+        },
+        // paragraph
+        Paragraph {
+            children: Vec<Inline>,
+        },
 
-    // code block
-    CodeBlock {
-        language: &str,
-        code: &str,
-    },
+        // code block
+        CodeBlock {
+            language: &str,
+            code: &str,
+        },
 
-    ListItem {
-        text: Option<TextNode>,
-        children: Option<Vec<TextNode>>,
-    },
+        // unordered list
+        List {
+            order: bool,
+            children: Vec<ListItem>,
+        },
 
-    // unordered list
-    UnorderedList {
-        children: Vec<ListItem>,
-    },
+        // quote
+        Quote {
+            children: Vec<Inline>,
+        },
+        // horizontal rule
+        HorizontalRule,
 
-    // ordered list
-    OrderedList {
-        children: Vec<ListItem>,
-    },
-    // quote
-    Quote {
-        text: TextNode,
-    },
-    // horizontal rule
-    HorizontalRule,
-    // image
-    Image {
-        alt: String,
-        url: String,
-    },
-    // table
-    Table {
-        children: Vec<TableRow>,
-    },
-    TableRow {
-        children: Vec<TableCell>,
-    },
-    TableCell {
-        text: String,
-    },
-}
+        // table
+        Table {
+            children: Vec<TableRow>,
+        },
+    }
 
-pub struct Ast {
-    children: Vec<Node>,
+    pub struct Ast {
+        children: Vec<Block>,
+    }
 }

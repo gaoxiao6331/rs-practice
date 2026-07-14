@@ -15,7 +15,7 @@
  | 表格  | `\|`       | <table><tr><td>
 */
 
-const css : &'static str = r#"
+const css: &'static str = r#"
 /* ===========================
    Base
    =========================== */
