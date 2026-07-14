@@ -15,8 +15,6 @@
 
 use auto_lifetime::auto_lifetime;
 
-/// 用 `#[auto_lifetime]` 自动给所有 `&str` 引用打上同一个生命周期 `'a`，
-/// 免去手动写 `LineType<'a>` / `&'a str` 的样板代码。
 #[auto_lifetime]
 pub enum LineType {
     Heading { level: u64, text: &str },
@@ -26,13 +24,79 @@ pub enum LineType {
     UnorderedList { text: &str, indent: u64 },
     OrderedList { text: &str },
     Quote { text: &str },
-    HorizentalRule,
+    HorizontalRule,
     Image { alt: &str, url: &str },
     TableRow { text: &str },
     BlankLine,
 }
 
-pub enum Node {}
+#[auto_lifetime]
+pub enum TextNode {
+    BoldText { text: &str },
+    ItalicText { text: &str },
+    PlainText { text: &str },
+    StrikethroughText { text: &str },
+    InlineCode { text: &str },
+}
+
+#[auto_lifetime]
+pub enum Node {
+    // heading
+    Heading {
+        level: u64,
+        text: &str,
+    },
+    // paragraph
+    Paragraph {
+        children: Node,
+    },
+    // text
+    Text {
+        children: Vec<Node>,
+    },
+
+    // code block
+    CodeBlock {
+        language: &str,
+        code: &str,
+    },
+
+    ListItem {
+        text: Option<TextNode>,
+        children: Option<Vec<TextNode>>,
+    },
+
+    // unordered list
+    UnorderedList {
+        children: Vec<ListItem>,
+    },
+
+    // ordered list
+    OrderedList {
+        children: Vec<ListItem>,
+    },
+    // quote
+    Quote {
+        text: TextNode,
+    },
+    // horizontal rule
+    HorizontalRule,
+    // image
+    Image {
+        alt: String,
+        url: String,
+    },
+    // table
+    Table {
+        children: Vec<TableRow>,
+    },
+    TableRow {
+        children: Vec<TableCell>,
+    },
+    TableCell {
+        text: String,
+    },
+}
 
 pub struct Ast {
     children: Vec<Node>,
