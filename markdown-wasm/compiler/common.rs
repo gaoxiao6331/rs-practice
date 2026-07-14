@@ -39,6 +39,19 @@ pub enum TextNode {
     InlineCode { text: &str },
 }
 
+pub struct ListItem {
+    text: TextNode,
+    children: Vec<ListItem>,
+}
+
+pub struct TableCell {
+    text: TextNode,
+}
+
+pub struct TableRow {
+    cols: Vec<TableCell>,
+}
+
 #[auto_lifetime]
 pub enum Node {
     // heading
