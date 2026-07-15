@@ -1,10 +1,13 @@
+use std::collections::HashMap;
 use super::common::ast::LineType;
 
 fn scan_line(md: &str) -> Vec<LineType<'_>> {
+
     let mut tokens = vec![];
 
     let lines = md.lines();
 
+    // TODO 这里可以多线程
     for line in lines {
         let line = line.trim();
 
@@ -12,6 +15,62 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
             tokens.push(LineType::BlankLine);
             continue;
         }
+
+        let mut  chars = line.char_indices();
+        if let Some((_, first)) = chars.next() {
+            // | 标题   | `#` `##` `###` |
+            // | 段落   | 普通文本           |
+            // | 粗体   | `**text**`     |
+            // | 行内代码 | `` `code` ``   |
+            // | 代码块  | ` ``` `        |
+            // | 无序列表 | `-`            |
+            // | 有序列表 | `1.`           |
+            // | 引用   | `>`            |
+            // | 链接   | `[text](url)`  |
+            // | 分割线  | `---`          |
+            // | 斜体  | `*text*`   |
+            // | 图片  | `![]()`    |
+            // | 删除线 | `~~text~~` |
+            // | 表格  | `\|`       |
+            let line_type = match first {
+                '#' => {
+                    // 多个# + 一个空格
+                    let mut hash_count = 1;
+                    let mut space = false;
+
+                    let mut idx: usize = 0;
+
+                    while let Some ((i, c)) = chars.next() {
+
+                        idx = i;
+
+                        if c == ' ' {
+                            space = true;
+                            break;
+                        }
+
+                        if c != '#' {
+                            break;
+                        } else {
+                            hash_count += 1;
+                        }
+                    }
+                    // 如果没有space认定为普通文本
+                    let res = if space {
+                        let text = &line[idx..];
+                        LineType::Heading { text, level: hash_count }
+                    } else {
+                        LineType::Paragraph { text: line }
+                    };
+
+                    res
+                },
+                _ => {
+                    LineType::Paragraph { text: line }
+                }
+            };
+        }
+
     }
     tokens
 }
