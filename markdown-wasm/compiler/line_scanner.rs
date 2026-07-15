@@ -33,6 +33,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
             // | 删除线 | `~~text~~` |
             // | 表格  | `\|`       |
             let line_type = match first {
+                // h
                 '#' => {
                     // 多个# + 一个空格
                     let mut hash_count = 1;
@@ -65,13 +66,45 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
 
                     res
                 },
-                '-' => {},
-                '>' => {},
-                '|' => {},
+                // hr ul
+                '-' => {
+                    // 如果有3个-，且只有-和空格，则是hr
+                    let mut without_space = line.chars().filter(|c| *c != ' ');
+                    let is_hr = without_space.all(|c| c == '-') && without_space.count() >= 3;
+                    if is_hr {
+                        LineType::HorizontalRule
+                    } else {
+                        if let Some(text) = line.strip_prefix("- ") {
+                            LineType::UnorderedList {
+                                indent: 0,
+                                text,
+                            }
+                        } else {
+                            LineType::Other { text: line }
+                        }
+                    }
+                },
+                ' ' => {
+                    LineType::Other { text: line }
+                },
+                // quote
+                '>' => {
+                    LineType::Other { text: line }
+                },
+                // table
+                '|' => {
+                    LineType::Other { text: line }
+                },
+                // ol
+                '0'..='9' => {
+                    LineType::Other { text: line }
+                },
                 _ => {
                     LineType::Other { text: line }
                 }
             };
+
+            tokens.push(line_type);
         }
 
     }
