@@ -19,16 +19,15 @@ use auto_lifetime::auto_lifetime;
 pub mod ast {
     pub enum LineType {
         Heading { level: u64, text: &str },
-        Paragraph { text: &str },
         CodeBlockStart { language: &str },
         CodeBlockEnd,
         UnorderedList { text: &str, indent: u64 },
         OrderedList { text: &str },
         Quote { text: &str },
         HorizontalRule,
-        Image { alt: &str, url: &str },
         TableRow { text: &str },
         BlankLine,
+        Other{ text: &str },
     }
 
     pub struct ListItem {

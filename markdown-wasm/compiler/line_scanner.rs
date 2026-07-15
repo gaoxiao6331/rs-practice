@@ -60,13 +60,16 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                         let text = &line[idx..];
                         LineType::Heading { text, level: hash_count }
                     } else {
-                        LineType::Paragraph { text: line }
+                        LineType::Other { text: line }
                     };
 
                     res
                 },
+                '-' => {},
+                '>' => {},
+                '|' => {},
                 _ => {
-                    LineType::Paragraph { text: line }
+                    LineType::Other { text: line }
                 }
             };
         }
