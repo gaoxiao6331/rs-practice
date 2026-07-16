@@ -1,8 +1,22 @@
-use std::collections::HashMap;
 use super::common::ast::LineType;
+use std::collections::HashMap;
+
+fn handle_hyphens(line: &str) -> LineType {
+    // 如果有3个-，且只有-和空格，则是hr
+    let mut without_space = line.chars().filter(|c| *c != ' ');
+    let is_hr = without_space.all(|c| c == '-') && without_space.count() >= 3;
+    if is_hr {
+        LineType::HorizontalRule
+    } else {
+        if let Some(text) = line.strip_prefix("- ") {
+            LineType::UnorderedList { indent: 0, text }
+        } else {
+            LineType::Other { text: line }
+        }
+    }
+}
 
 fn scan_line(md: &str) -> Vec<LineType<'_>> {
-
     let mut tokens = vec![];
 
     let lines = md.lines();
@@ -16,7 +30,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
             continue;
         }
 
-        let mut  chars = line.char_indices();
+        let mut chars = line.char_indices();
         if let Some((_, first)) = chars.next() {
             // | 标题   | `#` `##` `###` |
             // | 段落   | 普通文本           |
@@ -41,8 +55,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
 
                     let mut idx: usize = 0;
 
-                    while let Some ((i, c)) = chars.next() {
-
+                    while let Some((i, c)) = chars.next() {
                         idx = i;
 
                         if c == ' ' {
@@ -59,44 +72,41 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     // 如果没有space认定为普通文本
                     let res = if space {
                         let text = &line[idx..];
-                        LineType::Heading { text, level: hash_count }
+                        LineType::Heading {
+                            text,
+                            level: hash_count,
+                        }
                     } else {
                         LineType::Other { text: line }
                     };
 
                     res
-                },
+                }
                 // hr ul
                 '-' => {
-                    // 如果有3个-，且只有-和空格，则是hr
-                    let mut without_space = line.chars().filter(|c| *c != ' ');
-                    let is_hr = without_space.all(|c| c == '-') && without_space.count() >= 3;
-                    if is_hr {
-                        LineType::HorizontalRule
-                    } else {
-                        if let Some(text) = line.strip_prefix("- ") {
-                            LineType::UnorderedList {
-                                indent: 0,
-                                text,
-                            }
-                        } else {
-                            LineType::Other { text: line }
-                        }
-                    }
-                },
+                    handle_hyphens(line)
+                }
                 ' ' => {
-                    // unordered list
-                    // TODO
-                    LineType::Other { text: line }
-                },
+                    // sub unordered list
+                    if let Some(sub_str) = line.strip_prefix(' ') {
+                        match  handle_hyphens(sub_str) {
+                            LineType::UnorderedList { text, .. } => {
+                                let indent = (line.len() - text.len()) as u64;
+                                LineType::UnorderedList { text, indent }
+                            },
+                            _ => LineType::Other { text: line }
+                        }
+
+                    } else {
+                        LineType::Other { text: line }
+                    }
+                }
                 // quote 不支持嵌套
                 '>' => {
                     // 如果是空格，则认为是引用
                     let res = if let Some((i, c)) = chars.next() {
                         if c == ' ' {
-                            LineType::Quote {
-                                text: &line[i..],
-                            }
+                            LineType::Quote { text: &line[i..] }
                         } else {
                             LineType::Other { text: line }
                         }
@@ -105,21 +115,19 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     };
 
                     res
-                },
+                }
                 // table like
                 '|' => {
                     let columns = line.split("|").collect::<Vec<&str>>();
-                    LineType::TableRowLike {
-                        columns,
-                    }
-                },
+                    LineType::TableRowLike { columns }
+                }
                 // ol
                 '0'..='9' => {
                     let mut n = first;
                     // 去掉后续的数字
                     while let Some((_, c)) = chars.next() {
                         if c.is_digit(10) {
-                            continue
+                            continue;
                         } else {
                             n = c;
                         }
@@ -135,15 +143,12 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     } else {
                         LineType::Other { text: line }
                     }
-                },
-                _ => {
-                    LineType::Other { text: line }
                 }
+                _ => LineType::Other { text: line },
             };
 
             tokens.push(line_type);
         }
-
     }
     tokens
 }

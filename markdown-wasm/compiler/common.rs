@@ -27,7 +27,7 @@ pub mod ast {
         HorizontalRule,
         TableRowLike { columns: Vec<&str> }, // 这里可能不是table，需要根据上下文判断
         BlankLine,
-        Other{ text: &str },
+        Other { text: &str },
     }
 
     pub struct ListItem {
