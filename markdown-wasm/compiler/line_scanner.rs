@@ -106,9 +106,12 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
 
                     res
                 },
-                // table
+                // table like
                 '|' => {
-                    LineType::Other { text: line }
+                    let columns = line.split("|").collect::<Vec<&str>>();
+                    LineType::TableRowLike {
+                        columns,
+                    }
                 },
                 // ol
                 '0'..='9' => {

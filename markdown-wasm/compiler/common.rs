@@ -25,7 +25,7 @@ pub mod ast {
         OrderedList { text: &str },
         Quote { text: &str },
         HorizontalRule,
-        TableRow { text: &str },
+        TableRowLike { columns: Vec<&str> }, // 这里可能不是table，需要根据上下文判断
         BlankLine,
         Other{ text: &str },
     }
