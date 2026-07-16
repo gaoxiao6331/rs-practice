@@ -85,11 +85,26 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     }
                 },
                 ' ' => {
+                    // unordered list
+                    // TODO
                     LineType::Other { text: line }
                 },
-                // quote
+                // quote 不支持嵌套
                 '>' => {
-                    LineType::Other { text: line }
+                    // 如果是空格，则认为是引用
+                    let res = if let Some((i, c)) = chars.next() {
+                        if c == ' ' {
+                            LineType::Quote {
+                                text: &line[i..],
+                            }
+                        } else {
+                            LineType::Other { text: line }
+                        }
+                    } else {
+                        LineType::Other { text: line }
+                    };
+
+                    res
                 },
                 // table
                 '|' => {
@@ -97,7 +112,26 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                 },
                 // ol
                 '0'..='9' => {
-                    LineType::Other { text: line }
+                    let mut n = first;
+                    // 去掉后续的数字
+                    while let Some((_, c)) = chars.next() {
+                        if c.is_digit(10) {
+                            continue
+                        } else {
+                            n = c;
+                        }
+                    }
+                    // 判断是否是'.', 如果是，则是ol，不是的话，认为是普通文本
+                    if n == '.' {
+                        let text = if let Some((i, _)) = chars.next() {
+                            &line[i..]
+                        } else {
+                            ""
+                        };
+                        LineType::OrderedList { text }
+                    } else {
+                        LineType::Other { text: line }
+                    }
                 },
                 _ => {
                     LineType::Other { text: line }
