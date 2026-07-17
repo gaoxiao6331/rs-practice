@@ -17,6 +17,8 @@ use auto_lifetime::auto_lifetime;
 
 #[auto_lifetime]
 pub mod ast {
+
+    #[derive(Debug)]
     pub enum LineType {
         Heading { level: u64, text: &str },
         CodeBlockStart { language: &str },

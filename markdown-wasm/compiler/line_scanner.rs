@@ -1,5 +1,6 @@
+use std::fs;
+
 use super::common::ast::LineType;
-use std::collections::HashMap;
 
 fn handle_hyphens(line: &str) -> LineType {
     // 如果有3个-，且只有-和空格，则是hr
@@ -151,4 +152,22 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
         }
     }
     tokens
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scan_test() {
+
+        println!("{:?}", std::env::current_dir().unwrap());
+        // 读取 test.md
+        let test_md = fs::read_to_string("markdown-wasm/test.md").unwrap();
+        // 生成line type数组
+        let result = scan_line(&test_md);
+        // 打印数组
+        println!("{:?}", result);
+    }
 }
