@@ -116,7 +116,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                 // quote 不支持嵌套
                 '>' => {
                     if line == ">" {
-                        LineType::Other { text: line }
+                        LineType::Quote { text: "" }
                     } else {
                         // 如果是空格，则认为是引用
                         let res = if let Some((i, c)) = chars.next() {
