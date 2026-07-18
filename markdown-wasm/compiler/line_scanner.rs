@@ -35,7 +35,6 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
 
     // TODO 这里可以多线程
     for line in lines {
-        let line = line.trim();
 
         if line.is_empty() {
             tokens.push(LineType::BlankLine);
@@ -100,17 +99,13 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                 }
                 ' ' => {
                     // sub unordered list
-                    if let Some(sub_str) = line.strip_prefix(' ') {
-                        match  handle_hyphens(sub_str) {
-                            LineType::UnorderedList { text, .. } => {
-                                let indent = (line.len() - text.len()) as u64;
-                                LineType::UnorderedList { text, indent }
-                            },
-                            _ => LineType::Other { text: line }
-                        }
-
-                    } else {
-                        LineType::Other { text: line }
+                    let sub_str = line.trim_start();
+                    match  handle_hyphens(sub_str) {
+                        LineType::UnorderedList { text, .. } => {
+                            let indent = (line.len() - text.len()) as u64;
+                            LineType::UnorderedList { text, indent }
+                        },
+                        _ => LineType::Other { text: line }
                     }
                 }
                 // quote 不支持嵌套
@@ -121,7 +116,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                         // 如果是空格，则认为是引用
                         let res = if let Some((i, c)) = chars.next() {
                             if c == ' ' {
-                                LineType::Quote { text: &line[i..] }
+                                LineType::Quote { text: &line[i+1..] }
                             } else {
                                 LineType::Other { text: line }
                             }
@@ -152,8 +147,12 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     }
                     // 判断是否是'.', 如果是，则是ol，不是的话，认为是普通文本
                     if n == '.' {
-                        let text = if let Some((i, _)) = chars.next() {
-                            &line[i..]
+                        let text = if let Some((i, c)) = chars.next() {
+                            if c == ' ' {
+                                &line[i+1..]
+                            } else {
+                             line
+                            }
                         } else {
                             ""
                         };
