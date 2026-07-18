@@ -4,8 +4,19 @@ use super::common::ast::LineType;
 
 fn handle_hyphens(line: &str) -> LineType {
     // 如果有3个-，且只有-和空格，则是hr
-    let mut without_space = line.chars().filter(|c| *c != ' ');
-    let is_hr = without_space.all(|c| c == '-') && without_space.count() >= 3;
+    let mut hyphen_count = 0;
+    let mut contain_other_char = false;
+
+    for c in line.chars() {
+        match c {
+            '-' => hyphen_count += 1,
+            ' ' => {},
+            _ => contain_other_char = true,
+        }
+    }
+
+    let is_hr = !contain_other_char && hyphen_count >= 3;
+
     if is_hr {
         LineType::HorizontalRule
     } else {
@@ -72,7 +83,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     }
                     // 如果没有space认定为普通文本
                     let res = if space {
-                        let text = &line[idx..];
+                        let text = line[idx..].trim_start();
                         LineType::Heading {
                             text,
                             level: hash_count,
@@ -104,22 +115,27 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                 }
                 // quote 不支持嵌套
                 '>' => {
-                    // 如果是空格，则认为是引用
-                    let res = if let Some((i, c)) = chars.next() {
-                        if c == ' ' {
-                            LineType::Quote { text: &line[i..] }
+                    if line == ">" {
+                        LineType::Other { text: line }
+                    } else {
+                        // 如果是空格，则认为是引用
+                        let res = if let Some((i, c)) = chars.next() {
+                            if c == ' ' {
+                                LineType::Quote { text: &line[i..] }
+                            } else {
+                                LineType::Other { text: line }
+                            }
                         } else {
                             LineType::Other { text: line }
-                        }
-                    } else {
-                        LineType::Other { text: line }
-                    };
+                        };
 
-                    res
+                        res
+                    }
                 }
                 // table like
                 '|' => {
-                    let columns = line.split("|").collect::<Vec<&str>>();
+                    let tmp = line.split("|").collect::<Vec<&str>>();
+                    let columns = tmp[1..tmp.len() - 1].to_vec();
                     LineType::TableRowLike { columns }
                 }
                 // ol
@@ -131,6 +147,7 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                             continue;
                         } else {
                             n = c;
+                            break;
                         }
                     }
                     // 判断是否是'.', 如果是，则是ol，不是的话，认为是普通文本
@@ -144,7 +161,17 @@ fn scan_line(md: &str) -> Vec<LineType<'_>> {
                     } else {
                         LineType::Other { text: line }
                     }
-                }
+                },
+                '`' => {
+                    let code_line_prefix = "```";
+                    if line.starts_with(code_line_prefix) {
+                        let len = code_line_prefix.len();
+                        let lang = &line[len..];
+                        LineType::CodeBlock { language: lang }
+                    } else {
+                        LineType::Other { text: line }
+                    }
+                },
                 _ => LineType::Other { text: line },
             };
 

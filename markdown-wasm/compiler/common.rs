@@ -21,8 +21,7 @@ pub mod ast {
     #[derive(Debug)]
     pub enum LineType {
         Heading { level: u64, text: &str },
-        CodeBlockStart { language: &str },
-        CodeBlockEnd,
+        CodeBlock { language: &str },
         UnorderedList { text: &str, indent: u64 },
         OrderedList { text: &str },
         Quote { text: &str },
