@@ -91,6 +91,6 @@ pub mod ast {
     }
 
     pub struct Ast {
-        children: Vec<Block>,
+        pub children: Vec<Block>,
     }
 }
