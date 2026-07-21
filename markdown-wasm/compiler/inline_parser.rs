@@ -13,6 +13,19 @@ use crate::markdown_wasm::compiler::common::ast::Inline::{Bold, Text, Image, Ita
  */
 
 
+fn handle_link(link_line: &str) -> (Vec<Inline>, usize) {
+    let mut result = vec![];
+    let mut next_idx = 0;
+
+    let mut chars = link_line.chars().enumerate();
+
+    if let Some((idx, c)) = chars.next() {
+
+    }
+
+    (result, next_idx)
+}
+
 fn handle_line(line: &str) -> Vec<Inline> {
 
     let mut result = vec![];
