@@ -12,21 +12,57 @@ use crate::markdown_wasm::compiler::common::ast::Inline::{Bold, Text, Image, Ita
     }
  */
 
-
-fn handle_link(link_line: &str) -> (Vec<Inline>, usize) {
-    let mut result = vec![];
-    let mut next_idx = 0;
+// 给link和image公用的解析逻辑
+fn handle_link_like(link_line: &str, link: bool) -> (Option<Inline<'_>>, usize) {
 
     let mut chars = link_line.chars().enumerate();
 
-    if let Some((idx, c)) = chars.next() {
+    // [
+    if let Some((_, c)) = chars.next() {
+        if c == '['{
+            // ]
+            if let Some((idx_right_square_bracket, _)) = chars.find(|(_, c)| *c == ']') {
+                let round_bracket_str = &link_line[idx_right_square_bracket + 1..];
+                let mut round_bracket_chars = round_bracket_str.chars().enumerate();
+                // (
+                if let Some ((idx_left_round_bracket, left_round_bracket_char)) = round_bracket_chars.next() {
+                    if left_round_bracket_char == '(' {
+                        // )
+                        if let Some ((idx_right_round_bracket, _)) = round_bracket_chars.find(|(_, c)| *c == ')') {
 
+                            let len = idx_right_round_bracket + 1;
+
+                            let content = &link_line[1..idx_right_square_bracket];
+
+                            // link需要解析富文本
+                            let children = if link {
+                                handle_line(content)
+                            } else { // image不解析
+                                vec![
+                                    Inline::Text { text: content },
+                                ]
+                            };
+
+                            let url = &link_line[idx_left_round_bracket + 1..idx_right_round_bracket];
+
+                            return (
+                                Some(Inline::Link {
+                                    url,
+                                    children,
+                                }),
+                                len
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    (result, next_idx)
+    (Option::None, 0)
 }
 
-fn handle_line(line: &str) -> Vec<Inline> {
+fn handle_line(line: &str) -> Vec<Inline<'_>> {
 
     let mut result = vec![];
 
@@ -38,11 +74,14 @@ fn handle_line(line: &str) -> Vec<Inline> {
 
     while testing_idx < line.len() {
 
-        let mut chars = (&line[testing_idx..]).chars().enumerate();
+        let testing_str = &line[testing_idx..];
+
+        let mut chars = testing_str.chars().enumerate();
 
         // 是否匹配成功
         let mut matched = false;
 
+        // TODO 这个first_idx有问题
         if let Some((first_idx, first_char)) = chars.next()  {
 
             match first_char {
@@ -164,9 +203,46 @@ fn handle_line(line: &str) -> Vec<Inline> {
                 },
                 '!' => {
 
+                    let (link_result, len) = handle_link_like(&testing_str[1..], false);
+
+                    if let Some(link) = link_result {
+
+                        if let Inline::Link {
+                            children,
+                            url
+                        } = link {
+
+                            if children.len() == 1  {
+
+                                if let Some(f) = children.first() {
+
+                                    if let Inline::Text { text } = f {
+                                        matched = true;
+
+                                        result.push(Inline::Image {
+                                            alt: text,
+                                            url,
+                                        });
+
+                                        next_start_idx += (len + 1);
+                                    }
+                                }
+                            }
+
+                        }
+
+                    }
                 },
                 '[' => {
+                    let (link_result, len) = handle_link_like(testing_str, true);
 
+                    if let Some(link) = link_result {
+                        matched = true;
+
+                        result.push(link);
+
+                        next_start_idx += len;
+                    }
                 },
                 _ => {
 
