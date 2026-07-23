@@ -13,16 +13,16 @@ use crate::markdown_wasm::compiler::common::ast::Inline::{Bold, Text, Image, Ita
  */
 
 // 给link和image公用的解析逻辑
-fn handle_link_like(link_line: &str, link: bool) -> (Option<Inline<'_>>, usize) {
+fn handle_link_like(link_like: &str, link: bool) -> (Option<Inline<'_>>, usize) {
 
-    let mut chars = link_line.chars().enumerate();
+    let mut chars = link_like.chars().enumerate();
 
     // [
     if let Some((_, c)) = chars.next() {
         if c == '['{
             // ]
             if let Some((idx_right_square_bracket, _)) = chars.find(|(_, c)| *c == ']') {
-                let round_bracket_str = &link_line[idx_right_square_bracket + 1..];
+                let round_bracket_str = &link_like[idx_right_square_bracket + 1..];
                 let mut round_bracket_chars = round_bracket_str.chars().enumerate();
                 // (
                 if let Some ((idx_left_round_bracket, left_round_bracket_char)) = round_bracket_chars.next() {
@@ -32,18 +32,18 @@ fn handle_link_like(link_line: &str, link: bool) -> (Option<Inline<'_>>, usize) 
 
                             let len = idx_right_round_bracket + 1;
 
-                            let content = &link_line[1..idx_right_square_bracket];
+                            let content = &link_like[1..idx_right_square_bracket];
 
                             // link需要解析富文本
                             let children = if link {
-                                handle_line(content)
+                                parse_inline(content)
                             } else { // image不解析
                                 vec![
                                     Inline::Text { text: content },
                                 ]
                             };
 
-                            let url = &link_line[idx_left_round_bracket + 1..idx_right_round_bracket];
+                            let url = &link_like[idx_left_round_bracket + 1..idx_right_round_bracket];
 
                             return (
                                 Some(Inline::Link {
@@ -62,7 +62,7 @@ fn handle_link_like(link_line: &str, link: bool) -> (Option<Inline<'_>>, usize) 
     (Option::None, 0)
 }
 
-fn handle_line(line: &str) -> Vec<Inline<'_>> {
+fn parse_inline(inline: &str) -> Vec<Inline<'_>> {
 
     let mut result = vec![];
 
@@ -72,9 +72,9 @@ fn handle_line(line: &str) -> Vec<Inline<'_>> {
     // 正在试探的字符的位置
     let mut testing_idx = 0;
 
-    while testing_idx < line.len() {
+    while testing_idx < inline.len() {
 
-        let testing_str = &line[testing_idx..];
+        let testing_str = &inline[testing_idx..];
 
         let mut chars = testing_str.chars().enumerate();
 
@@ -90,15 +90,15 @@ fn handle_line(line: &str) -> Vec<Inline<'_>> {
 
                         if c == '*' { // bold
 
-                            let sub = &line[i+1..];
+                            let sub = &inline[i+1..];
                             // 找结束的**
                             if let Some(end_idx) = sub.find("**") {
                                 let children_str = &sub[..end_idx];
 
-                                let children = handle_line(children_str);
+                                let children = parse_inline(children_str);
 
                                 result.push(Text {
-                                    text: &line[next_start_idx..first_idx]
+                                    text: &inline[next_start_idx..first_idx]
                                 });
 
                                 result.push(Bold {
@@ -114,15 +114,15 @@ fn handle_line(line: &str) -> Vec<Inline<'_>> {
                             }
 
                         } else { // italic
-                            let sub = &line[i+1..];
+                            let sub = &inline[i+1..];
                             // 找结束的**
                             if let Some(end_idx) = sub.find("*") {
                                 let children_str = &sub[..end_idx];
 
-                                let children = handle_line(children_str);
+                                let children = parse_inline(children_str);
 
                                 result.push(Text {
-                                    text: &line[next_start_idx..first_idx]
+                                    text: &inline[next_start_idx..first_idx]
                                 });
 
                                 result.push(Italic {
@@ -147,15 +147,15 @@ fn handle_line(line: &str) -> Vec<Inline<'_>> {
 
                         if c == '~' {
 
-                            let sub = &line[i+1..];
+                            let sub = &inline[i+1..];
                             // 找结束的**
                             if let Some(end_idx) = sub.find("~~") {
                                 let children_str = &sub[..end_idx];
 
-                                let children = handle_line(children_str);
+                                let children = parse_inline(children_str);
 
                                 result.push(Text {
-                                    text: &line[next_start_idx..first_idx]
+                                    text: &inline[next_start_idx..first_idx]
                                 });
 
                                 result.push(Strikethrough {
@@ -178,13 +178,13 @@ fn handle_line(line: &str) -> Vec<Inline<'_>> {
                     }
                 },
                 '`' => {
-                    let sub = &line[first_idx+1..];
+                    let sub = &inline[first_idx+1..];
                     // 找结束的**
                     if let Some(end_idx) = sub.find("`") {
                         let children_str = &sub[..end_idx];
 
                         result.push(Text {
-                            text: &line[next_start_idx..first_idx]
+                            text: &inline[next_start_idx..first_idx]
                         });
 
                         result.push( {
@@ -258,26 +258,11 @@ fn handle_line(line: &str) -> Vec<Inline<'_>> {
         }
     }
 
-    if next_start_idx < line.len() {
+    if next_start_idx < inline.len() {
         result.push( Text {
-            text: &line[next_start_idx..]
+            text: &inline[next_start_idx..]
         })
     }
 
     result
-}
-
-fn parse_inline(inline: &str) -> Vec<Inline> {
-    let mut inlines = vec![];
-
-    // TODO 并行解析
-    for line in inline.lines() {
-
-        let mut buffer = String::new();
-
-
-
-
-    }
-    inlines
 }
